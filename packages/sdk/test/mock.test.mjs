@@ -257,3 +257,36 @@ test("MemWalMock namespace walks defer new writes until the next poll", async ()
     assert.deepEqual(poll.namespaces.map(ns => ns.name), ["bravo"]);
     assert.equal(poll.namespaces[0].memory_count, 2);
 });
+
+test('MemWalMock honors idempotencyKey for rememberAsync (#1147)', async () => {
+    const mock = MemWalMock.create();
+    const a = await mock.rememberAsync('dedupe me', 'ns', { idempotencyKey: 'key-123' });
+    const b = await mock.rememberAsync('dedupe me', 'ns', { idempotencyKey: 'key-123' });
+    assert.equal(a.job_id, b.job_id);
+
+    const res = await mock.recall({ query: 'dedupe', namespace: 'ns', limit: 10 });
+    assert.equal(res.total, 1);
+});
+
+test('MemWalMock validates items array for rememberBulkAsync (#1146)', async () => {
+    const mock = MemWalMock.create();
+    await assert.rejects(
+        () => mock.rememberBulkAsync([]),
+        { message: 'rememberBulkAsync: items must be a non-empty array' }
+    );
+    await assert.rejects(
+        () => mock.rememberBulkAsync('invalid'),
+        { message: 'rememberBulkAsync: items must be a non-empty array' }
+    );
+});
+
+test('MemWalMock terminates pagination and returns has_more: false on limit: 0 (#1144)', async () => {
+    const mock = MemWalMock.create();
+    await mock.remember('User likes coffee', 'ns-a');
+    await mock.remember('User likes tea', 'ns-b');
+
+    const page = await mock.listNamespaces({ limit: 0 });
+    assert.equal(page.namespaces.length, 0);
+    assert.equal(page.has_more, false);
+    assert.equal(page.next_cursor, null);
+});

@@ -99,6 +99,7 @@ export class MemWalMock {
     private readonly namespace: string;
     private readonly memories: MockMemory[] = [];
     private readonly jobs = new Map<string, MockMemory>();
+    private readonly idempotency = new Map<string, MockMemory>();
     private sequence = 0;
 
     private constructor(config: MemWalMockConfig = {}) {
@@ -117,14 +118,24 @@ export class MemWalMock {
     destroy(): void {
         this.memories.length = 0;
         this.jobs.clear();
+        this.idempotency.clear();
     }
 
     async rememberAsync(
         text: string,
         namespace?: string,
-        _options: { idempotencyKey?: string } = {}
+        options: { idempotencyKey?: string } = {}
     ): Promise<RememberAcceptedResult> {
+        if (options.idempotencyKey) {
+            const existing = this.idempotency.get(options.idempotencyKey);
+            if (existing) {
+                return { job_id: existing.jobId, status: "done" };
+            }
+        }
         const memory = this.store(text, namespace);
+        if (options.idempotencyKey) {
+            this.idempotency.set(options.idempotencyKey, memory);
+        }
         return { job_id: memory.jobId, status: "done" };
     }
 
@@ -171,6 +182,9 @@ export class MemWalMock {
     async rememberBulkAsync(
         items: RememberBulkItem[]
     ): Promise<RememberBulkAcceptedResult> {
+        if (!Array.isArray(items) || items.length === 0) {
+            throw new Error("rememberBulkAsync: items must be a non-empty array");
+        }
         const jobIds = items.map(
             (item) => this.store(item.text, item.namespace).jobId
         );
@@ -428,8 +442,10 @@ export class MemWalMock {
                 (Date.parse(ns.updated_at) === Date.parse(cursor.updated_at) &&
                     ns.name > cursor.namespace))
         );
-        const page = remaining.slice(0, options.limit ?? remaining.length);
-        const hasMore = remaining.length > page.length;
+        const rawLimit = options.limit ?? remaining.length;
+        const limit = Math.max(0, rawLimit);
+        const page = limit === 0 ? [] : remaining.slice(0, limit);
+        const hasMore = limit === 0 ? false : remaining.length > page.length;
         const last = page.at(-1);
         const watermark = last ? { updated_at: last.updated_at, namespace: last.name } : cursor;
         const nextCursor = watermark ? btoa(Array.from(new TextEncoder().encode(JSON.stringify({
