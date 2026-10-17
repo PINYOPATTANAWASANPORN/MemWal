@@ -171,3 +171,45 @@ test("MemWalManual.restore() rejects non-positive or non-integer limit before si
     }
     assert.equal(requests, 0);
 });
+
+test("MemWal.listNamespaces() rejects non-positive or non-integer limit before signing", async () => {
+    const memwal = client();
+    let requests = 0;
+    memwal.signedRequest = async () => {
+        requests += 1;
+        return { namespaces: [], next_cursor: null, has_more: false, snapshot_version: 1 };
+    };
+
+    const invalidLimits = [0, -1, 2.5, NaN, -0, "5", null, Infinity, -Infinity];
+    for (const bad of invalidLimits) {
+        await assert.rejects(
+            () => memwal.listNamespaces({ limit: bad }),
+            {
+                name: "Error",
+                message: /limit must be positive/,
+            },
+        );
+    }
+    assert.equal(requests, 0);
+});
+
+test("MemWal.listMemories() rejects non-positive or non-integer limit before signing", async () => {
+    const memwal = client();
+    let requests = 0;
+    memwal.signedRequest = async () => {
+        requests += 1;
+        return { memories: [], next_cursor: null, has_more: false, snapshot_version: 1, deleted: [], must_resync: false };
+    };
+
+    const invalidLimits = [0, -1, 2.5, NaN, -0, "5", null, Infinity, -Infinity];
+    for (const bad of invalidLimits) {
+        await assert.rejects(
+            () => memwal.listMemories({ limit: bad }),
+            {
+                name: "Error",
+                message: /limit must be positive/,
+            },
+        );
+    }
+    assert.equal(requests, 0);
+});
