@@ -1500,6 +1500,12 @@ export class MemWal {
      * ```
      */
     async listNamespaces(options: ListNamespacesOptions = {}): Promise<NamespacesResult> {
+        if (
+            options.limit !== undefined &&
+            (!Number.isInteger(options.limit) || options.limit < 1)
+        ) {
+            throw new Error("limit must be positive");
+        }
         const owner = await this.resolveOwner();
 
         const params = new URLSearchParams();
@@ -1543,6 +1549,12 @@ export class MemWal {
      * ```
      */
     async listMemories(options: ListMemoriesOptions = {}): Promise<MemoriesResult> {
+        if (
+            options.limit !== undefined &&
+            (!Number.isInteger(options.limit) || options.limit < 1)
+        ) {
+            throw new Error("limit must be positive");
+        }
         const owner = await this.resolveOwner();
 
         const params = new URLSearchParams();
